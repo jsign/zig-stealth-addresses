@@ -57,3 +57,12 @@ pub const EIP5564 = struct {
         return try Secp256k1.fromSec1(pub_key_bytes);
     }
 };
+
+test "generate stealth address" {
+    // Spending Private Key: 0xfb6c29ca5e7f75624ff4094f83a75945f9eb891753919722f6e7597cf0899ec0
+    // Viewing Private Key: 0x3884b97f3571ef8c69e5601ad0ee153478fa0f83b35e019e9d84d0f95ef002c5
+    // Spending Public Key: 0x03195eec0f562a7a92665f8d085abaf84fe496fa7c53a8a898bce045266b5a33dc
+    // Viewing Public Key: 0x02e075c0c31f3abf191e801a2f61d603e46293cd5ac8c4b5e11fb00624cf7fa98c
+    const sma = "st:eth:0x03195eec0f562a7a92665f8d085abaf84fe496fa7c53a8a898bce045266b5a33dc02e075c0c31f3abf191e801a2f61d603e46293cd5ac8c4b5e11fb00624cf7fa98c";
+    _ = try EIP5564.generateStealthAddress(sma);
+}
