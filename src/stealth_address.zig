@@ -67,7 +67,11 @@ pub const EIP5564 = struct {
         Keccak256.hash(&s.toCompressedSec1(), &s_hashed, .{});
 
         const fe_spending_key = try Secp256k1.scalar.Scalar.fromBytes(spending_key, Endian.Big);
-        const fe_s_hashed = try Secp256k1.scalar.Scalar.fromBytes(s_hashed, Endian.Big);
+        // A direct .fromBytes(...)  errors on non-canonical representations, so we pad it to use
+        // .fromBytes48(...) which does the (potentially needed) wrapping.
+        var padded_s_hashed: [48]u8 = [_]u8{0} ** 48;
+        @memcpy(padded_s_hashed[padded_s_hashed.len - 32 ..], &s_hashed);
+        const fe_s_hashed = Secp256k1.scalar.Scalar.fromBytes48(padded_s_hashed, Endian.Big);
 
         return Secp256k1.scalar.Scalar.add(fe_spending_key, fe_s_hashed).toBytes(Endian.Big);
     }
