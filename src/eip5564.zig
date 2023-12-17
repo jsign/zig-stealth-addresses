@@ -3,9 +3,9 @@ const Endian = std.builtin.Endian;
 const Secp256k1 = std.crypto.ecc.Secp256k1;
 const Keccak256 = std.crypto.hash.sha3.Keccak256;
 
-const Privkey = [32]u8;
-const Pubkey = [33]u8;
-const EthAddress = [20]u8;
+pub const Privkey = [32]u8;
+pub const Pubkey = [33]u8;
+pub const EthAddress = [20]u8;
 
 // StealthAddress is an implementation of EIP-5564 for the `schemeId`=0x00 (i.e: SECP256k1, with view tags)
 // In the future, we can generalize the code if more schemes are added.
