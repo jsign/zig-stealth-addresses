@@ -137,4 +137,12 @@ test "generate and check" {
         const ok = try EIP5564.checkStealthAddress(ga.stealth_address, ga.ephemeral_pubkey, wrong_viewing_key, spending_pubkey, ga.view_tag +% 1);
         try std.testing.expect(!ok);
     }
+
+    // Compute stealth key and verify with expected stealth address.
+    {
+        const got_privkey = try EIP5564.computeStealthKey(ga.ephemeral_pubkey, viewing_key, spending_key);
+        const got_stealth_addr_point = try Secp256k1.mul(Secp256k1.basePoint, got_privkey, Endian.Big);
+        const got_eth_addr = EIP5564.pointToEthAddr(got_stealth_addr_point);
+        try std.testing.expect(std.mem.eql(u8, &ga.stealth_address, &got_eth_addr));
+    }
 }
