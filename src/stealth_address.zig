@@ -105,4 +105,25 @@ test "generate and check" {
         const ok = try EIP5564.checkStealthAddress(ga.stealth_address, ga.ephemeral_pubkey, viewing_key, spending_pubkey, null);
         try std.testing.expect(ok);
     }
+
+    // Check with wrong tag
+    {
+        const ok = try EIP5564.checkStealthAddress(ga.stealth_address, ga.ephemeral_pubkey, viewing_key, spending_pubkey, ga.view_tag +% 1);
+        try std.testing.expect(!ok);
+    }
+
+    // Check with wrong spending pubkey
+    {
+        const wrong_spending_pubkey = try EIP5564.pubKeyFromHex("02706c71da3dd07932cd4a3c748a744f262db6a16de4df5bee58de0d03acba1260");
+        const ok = try EIP5564.checkStealthAddress(ga.stealth_address, ga.ephemeral_pubkey, viewing_key, wrong_spending_pubkey, ga.view_tag +% 1);
+        try std.testing.expect(!ok);
+    }
+
+    // Check with wrong viewing key
+    {
+        var wrong_viewing_key: Privkey = undefined;
+        _ = try std.fmt.hexToBytes(&wrong_viewing_key, "cc3dc00a8a9fbd1093a43282fe7c865b64cdbfd5a8350d1432a188f0504a6700");
+        const ok = try EIP5564.checkStealthAddress(ga.stealth_address, ga.ephemeral_pubkey, wrong_viewing_key, spending_pubkey, ga.view_tag +% 1);
+        try std.testing.expect(!ok);
+    }
 }
