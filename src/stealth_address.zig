@@ -87,12 +87,22 @@ test "generate and check" {
     // Spending Public Key: 0x03195eec0f562a7a92665f8d085abaf84fe496fa7c53a8a898bce045266b5a33dc
     // Viewing Public Key: 0x02e075c0c31f3abf191e801a2f61d603e46293cd5ac8c4b5e11fb00624cf7fa98c
     const sma = "st:eth:0x03195eec0f562a7a92665f8d085abaf84fe496fa7c53a8a898bce045266b5a33dc02e075c0c31f3abf191e801a2f61d603e46293cd5ac8c4b5e11fb00624cf7fa98c";
-    const ga = try EIP5564.generateStealthAddress(sma);
-
     var viewing_key: Privkey = undefined;
     _ = try std.fmt.hexToBytes(&viewing_key, "3884b97f3571ef8c69e5601ad0ee153478fa0f83b35e019e9d84d0f95ef002c5");
     const spending_pubkey = try EIP5564.pubKeyFromHex("03195eec0f562a7a92665f8d085abaf84fe496fa7c53a8a898bce045266b5a33dc");
 
-    const ok = try EIP5564.checkStealthAddress(ga.stealth_address, ga.ephemeral_pubkey, viewing_key, spending_pubkey, ga.view_tag);
-    try std.testing.expect(ok);
+    // Generate stealth address for stealth meta-address.
+    const ga = try EIP5564.generateStealthAddress(sma);
+
+    // Check with view tag
+    {
+        const ok = try EIP5564.checkStealthAddress(ga.stealth_address, ga.ephemeral_pubkey, viewing_key, spending_pubkey, ga.view_tag);
+        try std.testing.expect(ok);
+    }
+
+    // Check without view tag
+    {
+        const ok = try EIP5564.checkStealthAddress(ga.stealth_address, ga.ephemeral_pubkey, viewing_key, spending_pubkey, null);
+        try std.testing.expect(ok);
+    }
 }
