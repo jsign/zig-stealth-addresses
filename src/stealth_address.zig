@@ -3,16 +3,19 @@ const Endian = std.builtin.Endian;
 const Secp256k1 = std.crypto.ecc.Secp256k1;
 const Keccak256 = std.crypto.hash.sha3.Keccak256;
 
+const Privkey = [32]u8;
+const Pubkey = [33]u8;
+const EthAddress = [20]u8;
+
 // StealthAddress is an implementation of EIP-5564 for the `schemeId`=0x00 (i.e: SECP256k1, with view tags)
 // In the future, we can generalize the code if more schemes are added.
 pub const EIP5564 = struct {
-    const Pubkey = [33]u8;
-    const format_prefix = "st:eth:0x";
     // `n` as defined in the spec.
     const n = @typeInfo(Pubkey).Array.len;
+    const format_prefix = "st:eth:0x";
     const meta_addr_len = format_prefix.len + 2 * 2 * n; // 2 * 2 = (spending + view) * (hex)
 
-    pub fn generateStealthAddress(sma: []const u8) !struct { stealth_address: [20]u8, ephemeral_pub_key: Pubkey, view_tag: u8 } {
+    pub fn generateStealthAddress(sma: []const u8) !struct { stealth_address: EthAddress, ephemeral_pubkey: Secp256k1, view_tag: u8 } {
         if (sma.len != meta_addr_len) {
             std.log.warn("expected len {} got {}", .{ meta_addr_len, sma.len });
             return error.StealthMetaAddressWrongLength;
@@ -21,31 +24,42 @@ pub const EIP5564 = struct {
             return error.StealthMetaAddressWrongPrefix;
         }
 
-        var priv_ephemeral: [32]u8 = undefined;
-        std.crypto.random.bytes(&priv_ephemeral);
-        const pub_ephemeral = try Secp256k1.mul(Secp256k1.basePoint, priv_ephemeral, Endian.big);
+        var ephemeral_priv: Privkey = undefined;
+        std.crypto.random.bytes(&ephemeral_priv);
+        const ephemeral_pubkey = try Secp256k1.mul(Secp256k1.basePoint, ephemeral_priv, Endian.big);
 
-        const pub_spend = try pubKeyFromHex(sma[format_prefix.len .. format_prefix.len + 2 * n]);
-        const pub_view = try pubKeyFromHex(sma[format_prefix.len + 2 * n ..]);
+        const spend_pubkey = try pubKeyFromHex(sma[format_prefix.len .. format_prefix.len + 2 * n]);
+        const view_pubkey = try pubKeyFromHex(sma[format_prefix.len + 2 * n ..]);
 
-        const s = try Secp256k1.mul(pub_view, priv_ephemeral, Endian.big);
+        const s = try Secp256k1.mul(view_pubkey, ephemeral_priv, Endian.big);
         var s_hashed: [Keccak256.digest_length]u8 = undefined;
         Keccak256.hash(&s.toCompressedSec1(), &s_hashed, .{});
         const view_tag = s_hashed[0];
 
         const pub_s_hashed = try Secp256k1.mul(Secp256k1.basePoint, s_hashed, Endian.big);
-        const pub_stealth_address = Secp256k1.add(pub_spend, pub_s_hashed);
-
-        var buf: [32]u8 = undefined;
-        Keccak256.hash(&pub_stealth_address.toCompressedSec1(), &buf, .{});
-        var stealth_addr: [20]u8 = undefined;
-        @memcpy(&stealth_addr, buf[12..]);
+        const pub_stealth_address = Secp256k1.add(spend_pubkey, pub_s_hashed);
 
         return .{
-            .stealth_address = stealth_addr,
-            .ephemeral_pub_key = pub_ephemeral.toCompressedSec1(),
+            .stealth_address = pubkeyToEthAddr(pub_stealth_address),
+            .ephemeral_pubkey = ephemeral_pubkey,
             .view_tag = view_tag,
         };
+    }
+
+    pub fn checkStealthAddress(stealth_address: EthAddress, ephemeral_pubkey: Secp256k1, viewing_key: Privkey, spending_pubkey: Secp256k1, view_tag: ?u8) !bool {
+        const s = try Secp256k1.mul(ephemeral_pubkey, viewing_key, Endian.big);
+        var s_hashed: [Keccak256.digest_length]u8 = undefined;
+        Keccak256.hash(&s.toCompressedSec1(), &s_hashed, .{});
+
+        // If the view tag is provided, we do the optimized check.
+        if (view_tag != null and view_tag.? != s_hashed[0])
+            return false;
+
+        const pub_s_hashed = try Secp256k1.mul(Secp256k1.basePoint, s_hashed, Endian.big);
+        const pub_stealth_address = Secp256k1.add(spending_pubkey, pub_s_hashed);
+        const exp_stealth_address = pubkeyToEthAddr(pub_stealth_address);
+
+        return std.mem.eql(u8, &stealth_address, &exp_stealth_address);
     }
 
     fn pubKeyFromHex(hex: []const u8) !Secp256k1 {
@@ -56,13 +70,29 @@ pub const EIP5564 = struct {
         }
         return try Secp256k1.fromSec1(pub_key_bytes);
     }
+
+    fn pubkeyToEthAddr(pub_stealth_address: Secp256k1) EthAddress {
+        var buf: [32]u8 = undefined;
+        Keccak256.hash(&pub_stealth_address.toCompressedSec1(), &buf, .{});
+        var stealth_addr: EthAddress = undefined;
+        @memcpy(&stealth_addr, buf[12..]);
+
+        return stealth_addr;
+    }
 };
 
-test "generate stealth address" {
+test "generate and check" {
     // Spending Private Key: 0xfb6c29ca5e7f75624ff4094f83a75945f9eb891753919722f6e7597cf0899ec0
     // Viewing Private Key: 0x3884b97f3571ef8c69e5601ad0ee153478fa0f83b35e019e9d84d0f95ef002c5
     // Spending Public Key: 0x03195eec0f562a7a92665f8d085abaf84fe496fa7c53a8a898bce045266b5a33dc
     // Viewing Public Key: 0x02e075c0c31f3abf191e801a2f61d603e46293cd5ac8c4b5e11fb00624cf7fa98c
     const sma = "st:eth:0x03195eec0f562a7a92665f8d085abaf84fe496fa7c53a8a898bce045266b5a33dc02e075c0c31f3abf191e801a2f61d603e46293cd5ac8c4b5e11fb00624cf7fa98c";
-    _ = try EIP5564.generateStealthAddress(sma);
+    const ga = try EIP5564.generateStealthAddress(sma);
+
+    var viewing_key: Privkey = undefined;
+    _ = try std.fmt.hexToBytes(&viewing_key, "3884b97f3571ef8c69e5601ad0ee153478fa0f83b35e019e9d84d0f95ef002c5");
+    const spending_pubkey = try EIP5564.pubKeyFromHex("03195eec0f562a7a92665f8d085abaf84fe496fa7c53a8a898bce045266b5a33dc");
+
+    const ok = try EIP5564.checkStealthAddress(ga.stealth_address, ga.ephemeral_pubkey, viewing_key, spending_pubkey, ga.view_tag);
+    try std.testing.expect(ok);
 }
