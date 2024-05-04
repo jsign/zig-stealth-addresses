@@ -25,17 +25,17 @@ pub const EIP5564 = struct {
 
         var ephemeral_priv: Privkey = undefined;
         std.crypto.random.bytes(&ephemeral_priv);
-        const ephemeral_pubkey = try Secp256k1.mul(Secp256k1.basePoint, ephemeral_priv, Endian.Big);
+        const ephemeral_pubkey = try Secp256k1.mul(Secp256k1.basePoint, ephemeral_priv, .big);
 
         const spend_pubkey = try pubKeyFromHex(sma[format_prefix.len .. format_prefix.len + 2 * n]);
         const view_pubkey = try pubKeyFromHex(sma[format_prefix.len + 2 * n ..]);
 
-        const s = try Secp256k1.mul(view_pubkey, ephemeral_priv, Endian.Big);
+        const s = try Secp256k1.mul(view_pubkey, ephemeral_priv, .big);
         var s_hashed: [Keccak256.digest_length]u8 = undefined;
         Keccak256.hash(&s.toCompressedSec1(), &s_hashed, .{});
         const view_tag = s_hashed[0];
 
-        const pub_s_hashed = try Secp256k1.mul(Secp256k1.basePoint, s_hashed, Endian.Big);
+        const pub_s_hashed = try Secp256k1.mul(Secp256k1.basePoint, s_hashed, .big);
         const pub_stealth_address_point = Secp256k1.add(spend_pubkey, pub_s_hashed);
 
         return .{
@@ -46,7 +46,7 @@ pub const EIP5564 = struct {
     }
 
     pub fn checkStealthAddress(stealth_address: EthAddress, ephemeral_pubkey: Secp256k1, viewing_key: Privkey, spending_pubkey: Secp256k1, view_tag: ?u8) !bool {
-        const s = try Secp256k1.mul(ephemeral_pubkey, viewing_key, Endian.Big);
+        const s = try Secp256k1.mul(ephemeral_pubkey, viewing_key, .big);
         var s_hashed: [Keccak256.digest_length]u8 = undefined;
         Keccak256.hash(&s.toCompressedSec1(), &s_hashed, .{});
 
@@ -54,7 +54,7 @@ pub const EIP5564 = struct {
         if (view_tag != null and view_tag.? != s_hashed[0])
             return false;
 
-        const pub_s_hashed = try Secp256k1.mul(Secp256k1.basePoint, s_hashed, Endian.Big);
+        const pub_s_hashed = try Secp256k1.mul(Secp256k1.basePoint, s_hashed, .big);
         const pub_stealth_address = Secp256k1.add(spending_pubkey, pub_s_hashed);
         const exp_stealth_address = pointToEthAddr(pub_stealth_address);
 
@@ -62,18 +62,18 @@ pub const EIP5564 = struct {
     }
 
     pub fn computeStealthKey(ephemeral_pubkey: Secp256k1, viewing_key: Privkey, spending_key: Privkey) !Privkey {
-        const s = try Secp256k1.mul(ephemeral_pubkey, viewing_key, Endian.Big);
+        const s = try Secp256k1.mul(ephemeral_pubkey, viewing_key, .big);
         var s_hashed: [Keccak256.digest_length]u8 = undefined;
         Keccak256.hash(&s.toCompressedSec1(), &s_hashed, .{});
 
-        const fe_spending_key = try Secp256k1.scalar.Scalar.fromBytes(spending_key, Endian.Big);
+        const fe_spending_key = try Secp256k1.scalar.Scalar.fromBytes(spending_key, .big);
         // A direct .fromBytes(...)  errors on non-canonical representations, so we pad it to use
         // .fromBytes48(...) which does the (potentially needed) wrapping.
         var padded_s_hashed: [48]u8 = [_]u8{0} ** 48;
         @memcpy(padded_s_hashed[padded_s_hashed.len - 32 ..], &s_hashed);
-        const fe_s_hashed = Secp256k1.scalar.Scalar.fromBytes48(padded_s_hashed, Endian.Big);
+        const fe_s_hashed = Secp256k1.scalar.Scalar.fromBytes48(padded_s_hashed, .big);
 
-        return Secp256k1.scalar.Scalar.add(fe_spending_key, fe_s_hashed).toBytes(Endian.Big);
+        return Secp256k1.scalar.Scalar.add(fe_spending_key, fe_s_hashed).toBytes(.big);
     }
 
     fn pubKeyFromHex(hex: []const u8) !Secp256k1 {
@@ -145,7 +145,7 @@ test "generate and check" {
     // Compute stealth key and verify with expected stealth address.
     {
         const got_privkey = try EIP5564.computeStealthKey(ga.ephemeral_pubkey, viewing_key, spending_key);
-        const got_stealth_addr_point = try Secp256k1.mul(Secp256k1.basePoint, got_privkey, Endian.Big);
+        const got_stealth_addr_point = try Secp256k1.mul(Secp256k1.basePoint, got_privkey, .big);
         const got_eth_addr = EIP5564.pointToEthAddr(got_stealth_addr_point);
         try std.testing.expect(std.mem.eql(u8, &ga.stealth_address, &got_eth_addr));
     }
